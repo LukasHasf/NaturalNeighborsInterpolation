@@ -1,10 +1,12 @@
 include("../NaturalNeighborsInterpolation.jl")
 using Plots
 
-pointlist = randn(Float64, 2, 100)
-pointlist[:, 1] = [2, -100]
-pointlist[:, 2] = [1, -100]
+min_coord = 1.0 +eps(Float64)
+max_coord = 2 - 2*eps(Float64)
+width = max_coord - min_coord
+
+pointlist = min_coord .+ rand(Float64, 2, 100) .* width
 scatter(pointlist)
 savefig("pointlist.png")
 display(pointlist)
-hull = NaturalNeighborsInterpolation.ConvexHull2D(pointlist)
+hull = NaturalNeighborsInterpolation.BowyerWatson(pointlist)
