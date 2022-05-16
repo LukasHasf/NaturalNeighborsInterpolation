@@ -1,4 +1,5 @@
 include("../NaturalNeighborsInterpolation.jl")
+using VoronoiDelaunay
 using Plots
 
 min_coord = 1.0 +eps(Float64)
