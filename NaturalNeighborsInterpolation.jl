@@ -4,6 +4,7 @@ using Gadfly
 import Cairo, Fontconfig
 using Random
 using GeometricalPredicates
+using Combinatorics
 
 struct Edge
     a::Point2D
@@ -97,42 +98,52 @@ function isConvex(points)
     return all(crossproducts .<= 0) || all(crossproducts .>= 0)
 end
 
-function isSelfIntersecting(points)
-    function twoLinesIntersect(a,b,c,d)
-        a_x, a_y = getx(a), gety(a)
-        b_x, b_y = getx(b), gety(b)
-        c_x, c_y = getx(c), gety(c)
-        d_x, d_y = getx(d), gety(d)
-        bxax = (b_x-a_x)
-        byay = (b_y-a_y)
-        aycy = (a_y-c_y)
-        cxax = (c_x-a_x)
-        dycy = (d_y-c_y)
-        dxcx = (d_x-c_x)
-        num =   (bxax*aycy + byay*cxax)
-        denom = (bxax*dycy - byay*dxcx)
-        t =  num / denom 
-        return t
-    end
+"""    getEdges(points)
+
+Return the edges that connect the `points`.
+"""
+function getEdges(points)
     n = length(points)
-    isIntersecting = false
     lines = [Edge(points[i], points[i+1]) for i in 1:n-1]
     push!(lines, Edge(points[n], points[1]))
+    return lines
+end
+
+"""    twoLinesIntersect(a,b,c,d)
+
+Find the intersection of two lines, one going from pont `a` to point `b`, the other from `c` to `d`.
+
+
+Returns a parameter `t` which describes how far along the second line the intersection is. 
+Line segments intersect if `0 < t < 1`.
+"""
+function twoLinesIntersect(a,b,c,d)
+    a_x, a_y = getx(a), gety(a)
+    b_x, b_y = getx(b), gety(b)
+    c_x, c_y = getx(c), gety(c)
+    d_x, d_y = getx(d), gety(d)
+    bxax = (b_x-a_x)
+    byay = (b_y-a_y)
+    aycy = (a_y-c_y)
+    cxax = (c_x-a_x)
+    dycy = (d_y-c_y)
+    dxcx = (d_x-c_x)
+    num =   (bxax*aycy + byay*cxax)
+    denom = (bxax*dycy - byay*dxcx)
+    t =  num / denom 
+    return t
+end
+
+function isSelfIntersecting(points)
+    lines = getEdges(points)
     for line1 in lines
         for line2 in lines
             if equals(line1, line2)
                 continue
             end
-            a, b = line1.a, line2.b
-            c,d = line2.a, line2.b
-            #display(line1)
-            #display(line2)
+            a, b = line1.a, line1.b
+            c, d = line2.a, line2.b
             t = twoLinesIntersect(a,b,c,d)
-            if getx(a)==1.4916666666666667
-                println(a,b,c,d)
-                println(points)
-                println(t)
-            end
             if 0+eps(Float64) < t < 1-eps(Float64)
                 return true
             end
@@ -141,21 +152,79 @@ function isSelfIntersecting(points)
     return false
 end
 
-function getArea(points)
-    #println(isSelfIntersecting(points))
-    points = sort_angular(points)
-    n = length(points)
-    xs = [getx(p) for p in points]
-    ys = [gety(p) for p in points]
-    mid_x = sum(xs)/n
-    mid_y = sum(ys)/n
-    midpoint = Point(mid_x, mid_y)
-    A = zero(Float64)
-    for q in 1:length(points)-1
-        temp_triangle = Primitive(midpoint, points[q], points[q+1])
-        A += area(temp_triangle)
+"""    decomposeIntersection(points)
+
+Decompose a self intersecting polygon into its non-intersecting parts.
+Assumes `points` is already confirmed self-intersecting, otherwise this will 
+do ineffective calculations.
+"""
+function decomposeIntersection(points)
+    lines = getEdges(points)
+    intersection_points = []
+    for (l1,l2) in combinations(lines, 2)
+            if equals(l1, l2)
+                continue
+            end
+            a,b = l1.a, l1.b
+            c,d = l2.a, l2.b
+            t = twoLinesIntersect(a,b,c,d)
+            if !(0+eps(Float64) < t < 1-eps(Float64))
+                continue
+            end
+            a = [getx(a), gety(a)]
+            b = [getx(b), gety(b)]
+            c = [getx(c), gety(c)]
+            d = [getx(d), gety(d)]
+            push!(intersection_points, (c, c .+ (d .- c) .* t))
+            push!(intersection_points, (a, c .+ (d .- c) .* t))
     end
-    A += area(Primitive(midpoint, points[1], points[end]))
+
+    newpoints = []
+    cross_indices = []
+    for line in lines
+        push!(newpoints, line.a)
+        for intersection in intersection_points
+            a = Point(intersection[1]...)
+            if line.a == a
+                push!(newpoints, Point(intersection[2]...))
+                push!(cross_indices, length(newpoints))
+            end
+        end
+    end
+    display(newpoints)
+    display(cross_indices)
+    display(intersection_points)
+
+
+    return [points]
+end
+
+"""    getArea(points)
+
+
+Calculate the area of a polygon.
+"""
+function getArea(points)
+    A = zero(Float64)
+    if !isSelfIntersecting(points)
+        points = sort_angular(points)
+        n = length(points)
+        xs = [getx(p) for p in points]
+        ys = [gety(p) for p in points]
+        mid_x = sum(xs)/n
+        mid_y = sum(ys)/n
+        midpoint = Point(mid_x, mid_y)
+        for q in 1:length(points)-1
+            temp_triangle = Primitive(midpoint, points[q], points[q+1])
+            A += area(temp_triangle)
+        end
+        A += area(Primitive(midpoint, points[1], points[end]))
+    else
+        polygons = decomposeIntersection(points)
+        for poly in polygons
+            A += getArea(poly)
+        end
+    end
     return A
 end
 
