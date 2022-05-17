@@ -39,7 +39,8 @@ function getBowyerWatsonEnvelope(tesselation, interpolation_point)
         circumcenters[i+1] = circumcenter(triangle)
         ps = Array{Point2D, 1}(undef, 4)
         for (i,getpoint) in enumerate([geta, getb, getc, geta])
-            ps[i] = getpoint(triangle)
+            p = getpoint(triangle)
+            ps[i] = p
         end
         edges = [Edge(ps[i], ps[i+1]) for i in 1:length(ps)-1]
         push!(envelope_edges, edges...)
@@ -59,17 +60,96 @@ function getBowyerWatsonEnvelope(tesselation, interpolation_point)
     return final_edges, triangles, circumcenters
 end
 
+function sort_angular(points)
+    n = length(points)
+    xs = [getx(p) for p in points]
+    ys = [gety(p) for p in points]
+    mid_x = sum(xs)/n
+    mid_y = sum(ys)/n
+    angles = atan.(ys .- mid_y, xs .- mid_x)
+    sortind = sortperm(angles)
+    points = points[sortind]
+    return points
+end
+
+function isConvex(points)
+    n = length(points)
+    crossproducts = Array{Float64, 1}(undef, n)
+    for i in 1:n
+        x1, y1 = getx(points[i]), gety(points[i])
+        if i<n-1
+            x2, y2 = getx(points[i+1]), gety(points[i+1])
+            x3, y3 = getx(points[i+2]), gety(points[i+2])
+        elseif i==n-1
+            x2, y2 = getx(points[i+1]), gety(points[i+1])
+            x3, y3 = getx(points[1]), gety(points[1])
+        elseif i==n
+            x2, y2 = getx(points[1]), gety(points[1])
+            x3, y3 = getx(points[2]), gety(points[2])
+        end
+        dx1 = x2 - x1
+        dy1 = y2 - y1 
+        dx2 = x3 - x2
+        dy2 = y3 - y2
+        crossproducts[i] = dx1 * dy2 - dy1 * dx2
+    end
+    println(crossproducts)
+    return all(crossproducts .<= 0) || all(crossproducts .>= 0)
+end
+
+function isSelfIntersecting(points)
+    function twoLinesIntersect(a,b,c,d)
+        a_x, a_y = getx(a), gety(a)
+        b_x, b_y = getx(b), gety(b)
+        c_x, c_y = getx(c), gety(c)
+        d_x, d_y = getx(d), gety(d)
+        bxax = (b_x-a_x)
+        byay = (b_y-a_y)
+        aycy = (a_y-c_y)
+        cxax = (c_x-a_x)
+        dycy = (d_y-c_y)
+        dxcx = (d_x-c_x)
+        num =   (bxax*aycy + byay*cxax)
+        denom = (bxax*dycy - byay*dxcx)
+        t =  num / denom 
+        return t
+    end
+    n = length(points)
+    isIntersecting = false
+    lines = [Edge(points[i], points[i+1]) for i in 1:n-1]
+    push!(lines, Edge(points[n], points[1]))
+    for line1 in lines
+        for line2 in lines
+            if equals(line1, line2)
+                continue
+            end
+            a, b = line1.a, line2.b
+            c,d = line2.a, line2.b
+            #display(line1)
+            #display(line2)
+            t = twoLinesIntersect(a,b,c,d)
+            if getx(a)==1.4916666666666667
+                println(a,b,c,d)
+                println(points)
+                println(t)
+            end
+            if 0+eps(Float64) < t < 1-eps(Float64)
+                return true
+            end
+        end
+    end
+    return false
+end
+
 function getArea(points)
-    # TODO: Add test
+    #println(isSelfIntersecting(points))
+    points = sort_angular(points)
     n = length(points)
     xs = [getx(p) for p in points]
     ys = [gety(p) for p in points]
     mid_x = sum(xs)/n
     mid_y = sum(ys)/n
     midpoint = Point(mid_x, mid_y)
-    angles = atan.(ys .- mid_y, xs .- mid_x)
-    sortind = sortperm(angles)
-    points = points[sortind]
     A = zero(Float64)
     for q in 1:length(points)-1
         temp_triangle = Primitive(midpoint, points[q], points[q+1])
@@ -82,11 +162,15 @@ end
 function interpolate(pointlist, values, interpolation_point)
     n = size(pointlist)[2]
     points = Point2D[Point(pointlist[1,i], pointlist[2,i]) for i in 1:n]
+    if interpolation_point in points
+        idx = findall(x->x==interpolation_point, points)[1]
+        return values[idx]
+    end
     tess = DelaunayTessellation(n)
-    push!(tess, points)
+    push!(tess, copy(points))
     
 
-    # Find the triangle where the interpolated point is located
+    # Plot some triangles
     loc = locate(tess, interpolation_point)
     x,y = getplotxy(loc)
     trianglelayers = []
@@ -94,15 +178,29 @@ function interpolate(pointlist, values, interpolation_point)
         triangle = move(tess, loc)
         x,y = getplotxy(triangle)
         push!(trianglelayers, layer(x=x, y=y, Geom.path, color=[colorant"hotpink"]))
-        ps = Array{Point2D, 1}(undef, 4)
-        for (i,getpoint) in enumerate([geta, getb, getc, geta])
-            ps[i] = getpoint(triangle)
-        end
     end
     final_edges, enclosed_triangles, circumcenters = getBowyerWatsonEnvelope(tess, interpolation_point)
+    
+    #== Plotting ==#
+
+    x,y = VoronoiDelaunay.getplotxy(delaunayedges(tess))
+    delaunay_layer = layer(x=x,y=y, Geom.path)
+    point_layer = layer(x=pointlist[1,:], y=pointlist[2,:], color=values)
+    circumcenter_layer = layer(x=[getx(c) for c in circumcenters], y=[gety(c) for c in circumcenters], color=[colorant"green"])
+    plot_egdes_layer = []
+    for f_edge in final_edges
+        x = [getx(f_edge.a), getx(f_edge.b)]
+        y = [gety(f_edge.a), gety(f_edge.b)]
+        push!(plot_egdes_layer, layer(x=x, y=y, Geom.path, color=[colorant"black"]))
+    end
+    myplot = plot(point_layer,circumcenter_layer,plot_egdes_layer...,delaunay_layer, Scale.x_continuous(minvalue=1.0, maxvalue=2.0), Scale.y_continuous(minvalue=1.0, maxvalue=2.0))
+    draw(SVG("delaunay.svg", 8inch, 8inch), myplot)
+    
+    
     # Compute areas T of original cells
     points_in_envelope = [f_e.a for f_e in final_edges]
     relevant_values = Array{eltype(values), 1}(undef, length(points_in_envelope))
+    points_in_envelope = sort_angular(points_in_envelope) # stable
     for (i,p) in enumerate(points_in_envelope)
         idx = findall(x->x==p, points)
         relevant_values[i] = values[idx[1]]
@@ -127,16 +225,16 @@ function interpolate(pointlist, values, interpolation_point)
             end
         end
         # These are not guarenteed in the right (orientied) order!
-        relevant_points = [p, m1s[j], relevant_cirumcenters..., m2s[j]]
+        relevant_points = [p, m1s[j], relevant_cirumcenters..., m2s[j]] # correct
         Ts[j] += getArea(relevant_points)
-        relevant_points = [p,m1s[j], g1s[j], g2s[j], m2s[j]]
+        relevant_points = [p,m1s[j], g1s[j], g2s[j], m2s[j]] # consistent
+        display(relevant_points)
+        display(isSelfIntersecting(relevant_points))
         As[j] += getArea(relevant_points)
     end
-    display(Ts)
-    display(As)
     w_k = Ts .- As
     λ = w_k ./ sum(w_k)
-    display(λ)
+    display(As)
 
     #== Test if λ is correct via the Local Coordinates Property ==#
         supposed_x = sum([λ[k] * getx(points_in_envelope[k]) for k in 1:length(λ)])
@@ -145,19 +243,6 @@ function interpolate(pointlist, values, interpolation_point)
         println(supposed_y,",", gety(interpolation_point))
         interpolated_value = sum([λ[k] * relevant_values[k] for k in 1:length(λ)])
         println(interpolated_value)
-    #== Plotting ==#
-
-    x,y = VoronoiDelaunay.getplotxy(delaunayedges(tess))
-    delaunay_layer = layer(x=x,y=y, Geom.path)
-    point_layer = layer(x=pointlist[1,:], y=pointlist[2,:], color=values)
-    plot_egdes_layer = []
-    for f_edge in final_edges
-        x = [getx(f_edge.a), getx(f_edge.b)]
-        y = [gety(f_edge.a), gety(f_edge.b)]
-        push!(plot_egdes_layer, layer(x=x, y=y, Geom.path, color=[colorant"black"]))
-    end
-    myplot = plot(point_layer,plot_egdes_layer...,delaunay_layer, Scale.x_continuous(minvalue=1.0, maxvalue=2.0), Scale.y_continuous(minvalue=1.0, maxvalue=2.0))
-    draw(SVG("delaunay.svg", 8inch, 8inch), myplot)
 end
 
 function BowyerWatson(pointlist)
