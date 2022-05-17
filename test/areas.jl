@@ -1,5 +1,6 @@
 using GeometricalPredicates
 using Test
+using Random
 include("../NaturalNeighborsInterpolation.jl")
 
 function dist(p, q)
@@ -32,6 +33,7 @@ end
 
 square = [Point(min_coord, min_coord), Point(min_coord, max_coord),
             Point(max_coord, max_coord), Point(max_coord, min_coord)]
+square = Random.shuffle(square)
 correctArea = (max_coord - min_coord)^2
 calculatedArea = NaturalNeighborsInterpolation.getArea(square)
 @test correctArea ≈ calculatedArea
