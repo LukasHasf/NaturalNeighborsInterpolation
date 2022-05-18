@@ -6,6 +6,10 @@ using Random
 using GeometricalPredicates
 using Combinatorics
 
+"""    Edge(a,b)
+
+An undirected egde between `Point2D` `a` and `Point2D` `b`. 
+"""
 struct Edge
     a::Point2D
     b::Point2D
@@ -16,6 +20,21 @@ function equals(e1::Edge, e2::Edge)
         return true
     end
     return false
+end
+
+"""    sharePoint(e1::Edge, e2::Edge)
+
+Return the shared point if `e1` and `e2` share a common point, else `nothing`.
+"""
+function sharePoint(e1::Edge, e2::Edge)
+    a,b = e1.a, e1.b
+    c,d = e2.a, e2.b
+    if a in [c,d]
+        return a
+    elseif b in [c,d] 
+        return b
+    end
+    return nothing
 end
 
 
@@ -46,6 +65,7 @@ function getBowyerWatsonEnvelope(tesselation, interpolation_point)
         edges = [Edge(ps[i], ps[i+1]) for i in 1:length(ps)-1]
         push!(envelope_edges, edges...)
     end
+    # Final edges are the envelope edges without the removed edges
     final_edges = []
     for e_edge in envelope_edges
         removed = false
@@ -58,15 +78,29 @@ function getBowyerWatsonEnvelope(tesselation, interpolation_point)
             push!(final_edges, e_edge)
         end
     end
-    return final_edges, triangles, circumcenters
+    #= 
+    Find the removed points. Sometimes a two edges are removed at a point that was only 
+    connected to these two edges. If such a thing happens, the construction of the envelope
+    was not successful. This following part selects points that are possibly removed. The final_edges
+    check happens in `interpolate`.
+    =#
+    removed_points = []
+    for (r1, r2) in combinations(removed_edges, 2)
+        shared_point = sharePoint(r1,r2)
+        if !isnothing(shared_point)
+            push!(removed_points, shared_point)
+        end
+    end
+
+    return final_edges, triangles, circumcenters, removed_points
 end
 
 function sort_angular(points)
-    n = length(points)
     xs = [getx(p) for p in points]
     ys = [gety(p) for p in points]
-    mid_x = sum(xs) / n
-    mid_y = sum(ys) / n
+    midpoint = centerOfWeight(points)
+    mid_x = getx(midpoint)
+    mid_y = gety(midpoint)
     angles = atan.(ys .- mid_y, xs .- mid_x)
     sortind = sortperm(angles)
     points = points[sortind]
@@ -114,8 +148,8 @@ end
 Find the intersection of two lines, one going from pont `a` to point `b`, the other from `c` to `d`.
 
 
-Returns a parameter `t` which describes how far along the second line the intersection is. 
-Line segments intersect if `0 < t < 1`.
+Returns two parameters `t2, t1` which describe how far along the second / first line the intersection is. 
+Line segments intersect if `∀ t ∈ [t1, t2]: 0 < t < 1 `.
 """
 function twoLinesIntersect(a, b, c, d)
     a_x, a_y = getx(a), gety(a)
@@ -124,14 +158,20 @@ function twoLinesIntersect(a, b, c, d)
     d_x, d_y = getx(d), gety(d)
     bxax = (b_x - a_x)
     byay = (b_y - a_y)
+    cyay = (c_y - a_y)
     aycy = (a_y - c_y)
     cxax = (c_x - a_x)
     dycy = (d_y - c_y)
     dxcx = (d_x - c_x)
     num = (bxax * aycy + byay * cxax)
     denom = (bxax * dycy - byay * dxcx)
-    t = num / denom
-    return t
+    t2 = num / denom
+    if bxax==0
+        t1 = (cyay + dycy * t2)/byay
+    else
+        t1 = (cxax + dxcx*t2)/bxax
+    end
+    return t2, t1
 end
 
 """    isSelfIntersecting(points)
@@ -143,8 +183,8 @@ function isSelfIntersecting(points)
     for (line1, line2) in combinations(lines, 2)
         a, b = line1.a, line1.b
         c, d = line2.a, line2.b
-        t = twoLinesIntersect(a, b, c, d)
-        if 0 + eps(Float64) < t < 1 - eps(Float64)
+        t2, t1 = twoLinesIntersect(a, b, c, d)
+        if (0 + eps(Float64) < t2 < 1 - eps(Float64)) && (0 + eps(Float64) < t1 < 1 - eps(Float64))
             return true
         end
     end
@@ -161,22 +201,19 @@ function decomposeIntersection(points)
     lines = getEdges(points)
     intersection_points = []
     for (l1, l2) in combinations(lines, 2)
-        if equals(l1, l2)
-            continue
-        end
         a, b = l1.a, l1.b
         c, d = l2.a, l2.b
-        t = twoLinesIntersect(a, b, c, d)
-        if !(0 + eps(Float64) < t < 1 - eps(Float64))
+        t, t1 = twoLinesIntersect(a, b, c, d)
+        if !((0 + eps(Float64) < t < 1 - eps(Float64)) && (0 + eps(Float64) < t1 < 1 - eps(Float64)))
             continue
         end
+        t,_ = twoLinesIntersect(a, b, c, d)
         a = [getx(a), gety(a)]
         c = [getx(c), gety(c)]
         d = [getx(d), gety(d)]
         push!(intersection_points, (c, c .+ (d .- c) .* t))
         push!(intersection_points, (a, c .+ (d .- c) .* t))
     end
-
     newpoints = []
     cross_indices = []
     for line in lines
@@ -202,12 +239,54 @@ function decomposeIntersection(points)
     return polys
 end
 
+
+function polygonOrientation(points)
+    n = length(points)
+    xs = [getx(p) for p in points]
+    ys = [gety(p) for p in points]
+    min_idx = -1
+    min_idx_x = findall(p->p==minimum(xs), xs)
+    if length(min_idx_x)>1
+        min_y = maximum(ys)
+        for i in min_idx_x
+            if ys[i]<min_y
+                min_idx = i
+                min_y = ys[i]
+            end
+        end
+    else
+        min_idx = min_idx_x[1]
+    end
+    # Point at min_idx is part of the convex hull
+    b = points[min_idx]
+    if min_idx==1
+        a = points[n]
+        c = points[2]
+    elseif min_idx==n
+        a = points[n-1]
+        c = points[1]
+    else
+        a = points[min_idx-1]
+        c = points[min_idx+1]
+    end
+    # Determinant of these locally convex three points
+    det = getx(b)*gety(c) + getx(a)*gety(b) + gety(a)*getx(c) - (gety(a)*getx(b) + gety(b)*getx(c) + getx(a)*gety(c))
+    return sign(det)
+end
+
+function centerOfWeight(points)
+    n = length(points)
+    x = [getx(p) for p in points]
+    y = [gety(p) for p in points]
+    return Point(sum(x)/n, sum(y)/n)
+end
+
 """    getArea(points)
 
 
-Calculate the area of a polygon.
+Calculate the area of a polygon
 """
-function getArea(points)
+function getArea(points, envelope)
     A = zero(Float64)
     if !isSelfIntersecting(points)
         points = sort_angular(points)
@@ -223,12 +302,17 @@ function getArea(points)
         end
         A += area(Primitive(midpoint, points[1], points[end]))
     else
+        #name = randstring(10)
+        #plotPoly(points, name*".svg")
+        #println(name)
         polygons = decomposeIntersection(points)
-        for poly in polygons
-            A += getArea(poly)
+        for (i,poly) in enumerate(polygons)
+            if inpolygon(envelope, centerOfWeight(poly))
+                A += getArea(poly, envelope)
+            end
         end
     end
-    return A
+    return abs(A)
 end
 
 """    findNearest(p, points)
@@ -253,6 +337,27 @@ function findNearest(p, points)
     return min_index
 end
 
+"""    areCollinear(a,b,c)
+
+If points `a`, `b` and `c` are collinear, return `true`
+"""
+function areCollinear(a,b,c)
+    dx1 = getx(a) - getx(b)
+    dx2 = getx(c) - getx(b)
+    dy1 = gety(a) - gety(b)
+    dy2 = gety(c) - gety(b)
+    crossproduct = dx1 * dy2 - dy1 * dx2
+    return abs(crossproduct) < eps(Float64)
+end
+
+function plotPoly(poly, name)
+    x = [getx(p) for p in poly]
+    y = [gety(p) for p in poly]
+    tlayer = layer(x=x,y=y, Geom.path)
+    myplot = plot(tlayer, Scale.x_continuous(minvalue=1.0, maxvalue=2.0), Scale.y_continuous(minvalue=1.0, maxvalue=2.0))
+    draw(SVG(name, 8inch, 8inch), myplot)
+end
+
 """    interpolate(pointlist, values, interpolation_point)
 
 Interpolate at `interpolation_point` using the known `values` at coordinate `pointlist`.
@@ -266,8 +371,18 @@ function interpolate(points, values, interpolation_point, tess)
         return values[idx]
     end
 
-    final_edges, enclosed_triangles, circumcenters = getBowyerWatsonEnvelope(tess, interpolation_point)
-
+    final_edges, enclosed_triangles, circumcenters, removed_points = getBowyerWatsonEnvelope(tess, interpolation_point)
+    
+    n_edges = zeros(Int, length(removed_points))
+    for e in delaunayedges(tess)
+        a,b = geta(e), getb(e)
+        for i in 1:length(removed_points)
+            if n_edges[i] <3 && (a==removed_points[i] || b==removed_points[i])
+                n_edges[i] += one(Int)
+            end
+        end
+    end
+    
     #== Plotting ==
     # Plot some triangles
     loc = locate(tess, interpolation_point)
@@ -281,7 +396,7 @@ function interpolate(points, values, interpolation_point, tess)
 
     x,y = VoronoiDelaunay.getplotxy(delaunayedges(tess))
     delaunay_layer = layer(x=x,y=y, Geom.path)
-    point_layer = layer(x=pointlist[1,:], y=pointlist[2,:], color=values)
+    point_layer = layer(x=[getx(p) for p in points], y=[gety(p) for p in points], color=values)
     circumcenter_layer = layer(x=[getx(c) for c in circumcenters], y=[gety(c) for c in circumcenters], color=[colorant"green"])
     plot_egdes_layer = []
     for f_edge in final_edges
@@ -291,7 +406,7 @@ function interpolate(points, values, interpolation_point, tess)
     end
     interp_layer = layer(x=[getx(interpolation_point)], y=[gety(interpolation_point)], shape=[Shape.xcross])
     myplot = plot(interp_layer, point_layer,circumcenter_layer,plot_egdes_layer...,delaunay_layer, Scale.x_continuous(minvalue=1.0, maxvalue=2.0), Scale.y_continuous(minvalue=1.0, maxvalue=2.0))
-    draw(SVG("delaunay.svg", 8inch, 8inch), myplot)==#
+    draw(SVG("delaunay.svg", 8inch, 8inch), myplot)# =#
 
 
     # Compute areas T of original cells
@@ -302,7 +417,16 @@ function interpolate(points, values, interpolation_point, tess)
         idx = findall(x -> x == p, points)
         if isempty(idx)
             # Hopefully getting the intersection speeds up the nearest neighbor search
-            idx = [findNearest(p, intersect(points, points_in_envelope))]  
+            valid_envelope = intersect(points, points_in_envelope)
+            idx = [findNearest(p, valid_envelope)]
+            idx = findfirst(valid_envelope[idx] .== points)
+            # Check if construction of envelope was successful
+            if length(unique(points_in_envelope)) < 6 || minimum(n_edges) <= 2
+                idx = [findNearest(interpolation_point, valid_envelope)]
+                idx = findfirst(valid_envelope[idx] .== points)
+                # If not, fall back to nearest neighbor interpolation
+                return values[idx[1]]
+            end
         end
         relevant_values[i] = values[idx[1]]
     end
@@ -314,12 +438,48 @@ function interpolate(points, values, interpolation_point, tess)
     m1s = [Point2D(0.5 * (getx(p) + getx(q)), 0.5 * (gety(p) + gety(q))) for (p, q) in zip(points_in_envelope, retarded_points)]
     m2s = [Point2D(0.5 * (getx(p) + getx(q)), 0.5 * (gety(p) + gety(q))) for (p, q) in zip(points_in_envelope, advanced_points)]
     # Circumcenters added by insertion of interpolation points
-    g1s = [circumcenter(Primitive(points_in_envelope[i], retarded_points[i], interpolation_point)) for i in 1:length(points_in_envelope)]
-    g2s = [circumcenter(Primitive(points_in_envelope[i], advanced_points[i], interpolation_point)) for i in 1:length(points_in_envelope)]
+    g1s = Array{Point2D, 1}(undef, length(points_in_envelope))
+    g2s = Array{Point2D, 1}(undef, length(points_in_envelope))
+    for i in 1:length(points_in_envelope)
+        p = points_in_envelope[i]
+        r = retarded_points[i]
+        a = advanced_points[i]
+        # Sometimes the point are on a line, thus not forming a triangle. Then the 
+        # next best thing to the circumcenter of all three points is the circumcenter
+        # of the two extremal points. To find them, the points are projected on their common line.
+        if areCollinear(p, r, interpolation_point)
+            direction = [getx(p) - getx(r), gety(p)-gety(r)]
+            temp_points= [p, r, interpolation_point]
+            projections = [direction[1]*getx(q) + direction[2]*gety(q) for q in temp_points]
+            min_idx = argmin(projections)
+            max_idx = argmax(projections)
+            min_point = temp_points[min_idx]
+            max_point = temp_points[max_idx]
+            g1s[i] = Point(0.5*(getx(min_point) + getx(max_point)),
+                            0.5*(gety(min_point) + gety(max_point)))
+        else
+            g1s[i] = circumcenter(Primitive(p, r, interpolation_point))
+        end
+
+        if areCollinear(p, a, interpolation_point)
+            direction = [getx(p) - getx(a), gety(p)-gety(a)]
+            temp_points= [p, a, interpolation_point]
+            projections = [direction[1]*getx(q) + direction[2]*gety(q) for q in temp_points]
+            min_idx = argmin(projections)
+            max_idx = argmax(projections)
+            min_point = temp_points[min_idx]
+            max_point = temp_points[max_idx]
+            g2s[i] = Point(0.5*(getx(min_point) + getx(max_point)),
+                            0.5*(gety(min_point) + gety(max_point)))
+        else
+            g2s[i] = circumcenter(Primitive(p, a, interpolation_point))
+        end
+    end
     # Area of unmodified tesselation
     Ts = zeros(Float64, length(points_in_envelope))
     # Area of modified tesselation
     As = zeros(Float64, length(points_in_envelope))
+    envelope = Polygon(points_in_envelope...)
     for (j, p) in enumerate(points_in_envelope)
         relevant_cirumcenters = []
         for (i, t) in enumerate(enclosed_triangles)
@@ -330,11 +490,11 @@ function interpolate(points, values, interpolation_point, tess)
         # These are not guarenteed in the right (orientied) order!
         # Since they are also never self-intersecting, they can be sorted beforehand
         relevant_points = sort_angular([p, m1s[j], relevant_cirumcenters..., m2s[j]])
-        Ts[j] += getArea(relevant_points)
+        Ts[j] += getArea(relevant_points, envelope)
         relevant_points = [p, m1s[j], g1s[j], g2s[j], m2s[j]]
-        As[j] += getArea(relevant_points)
+        As[j] += getArea(relevant_points, envelope)
     end
-    w_k = Ts .- As
+    w_k = abs.(Ts .- As)
     λ = w_k ./ sum(w_k)
 
     #== Test if λ is correct via the Local Coordinates Property ==#
