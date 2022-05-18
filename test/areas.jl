@@ -18,22 +18,14 @@ end
 min_coord = 1.0 +eps(Float64)
 max_coord = 2 - 2*eps(Float64)
 width = max_coord - min_coord
-n = 30
-pointlist = min_coord .+ rand(Float64, 2, n) .* width
-pointlist[:, 1] = [min_coord, min_coord]
-pointlist[:, 2] = [min_coord, max_coord]
-pointlist[:, 3] = [max_coord, max_coord]
-points = Point2D[Point(pointlist[1,i], pointlist[2,i]) for i in 1:n]
-triangles = [Primitive(points[i], points[i+1], points[i+2]) for i in 1:n-2]
-for t in triangles
-    correctArea = triArea(t)
-    otherArea = NaturalNeighborsInterpolation.getArea([getpoint(t) for getpoint in [geta, getb, getc]])
-    @test correctArea ≈ otherArea
-end
 
 square = [Point(min_coord, min_coord), Point(min_coord, max_coord),
             Point(max_coord, max_coord), Point(max_coord, min_coord)]
-square = Random.shuffle(square)
 correctArea = (max_coord - min_coord)^2
 calculatedArea = NaturalNeighborsInterpolation.getArea(square)
 @test correctArea ≈ calculatedArea
+
+poly = [Point(1.5, 1.75), Point(1.5, 1.25), Point(1.75, 1.5), Point(1.25, 1.5)]
+correct_area = 1/16
+calculatedArea = NaturalNeighborsInterpolation.getArea(poly)
+@test correct_area ≈ calculatedArea
