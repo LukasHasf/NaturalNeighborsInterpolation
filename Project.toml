@@ -1,3 +1,6 @@
+name = "NaturalNeighborsInterpolation"
+uuid = "68cdaad2-3999-4583-aeed-dd629d2fb15f"
+
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Cairo = "159f3aea-2a34-519c-b102-8c37f9878175"
