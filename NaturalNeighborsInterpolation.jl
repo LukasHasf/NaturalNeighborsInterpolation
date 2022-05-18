@@ -134,6 +134,10 @@ function twoLinesIntersect(a, b, c, d)
     return t
 end
 
+"""    isSelfIntersecting(points)
+
+Return `true` if the polygon defined by `points` is self-intersecting.
+"""
 function isSelfIntersecting(points)
     lines = getEdges(points)
     for (line1, line2) in combinations(lines, 2)
@@ -227,16 +231,40 @@ function getArea(points)
     return A
 end
 
-function interpolate(pointlist, values, interpolation_point)
-    n = size(pointlist)[2]
-    points = Point2D[Point(pointlist[1, i], pointlist[2, i]) for i in 1:n]
+"""    findNearest(p, points)
+
+Find nearest point in `points` to point `p`.
+
+Returns index of nearest point.
+"""
+function findNearest(p, points)
+    function distSq(p, q)
+        return (getx(p) - getx(q))^2 + (gety(p) - gety(q))^2
+    end
+    min_distance = 0.0
+    min_index = -1
+    for (i,q) in enumerate(points)
+        d = distSq(p, q)
+        if d<min_distance || min_index==-1
+            min_index = i
+            min_distance = d
+        end
+    end
+    return min_index
+end
+
+"""    interpolate(pointlist, values, interpolation_point)
+
+Interpolate at `interpolation_point` using the known `values` at coordinate `pointlist`.
+`points` is a `Vector` of `Point2D`, and `interpolation_point` a single `Point2D`.
+`tess` is the `DelaunayTessellation` of `points`.
+"""
+function interpolate(points, values, interpolation_point, tess)
+    # If point is on grid of known values, return that kown value
     if interpolation_point in points
         idx = findall(x -> x == interpolation_point, points)[1]
         return values[idx]
     end
-    tess = DelaunayTessellation(n)
-    # Pushing into tess modifies points
-    push!(tess, copy(points))
 
     final_edges, enclosed_triangles, circumcenters = getBowyerWatsonEnvelope(tess, interpolation_point)
 
@@ -261,16 +289,21 @@ function interpolate(pointlist, values, interpolation_point)
         y = [gety(f_edge.a), gety(f_edge.b)]
         push!(plot_egdes_layer, layer(x=x, y=y, Geom.path, color=[colorant"black"]))
     end
-    myplot = plot(point_layer,circumcenter_layer,plot_egdes_layer...,delaunay_layer, Scale.x_continuous(minvalue=1.0, maxvalue=2.0), Scale.y_continuous(minvalue=1.0, maxvalue=2.0))
+    interp_layer = layer(x=[getx(interpolation_point)], y=[gety(interpolation_point)], shape=[Shape.xcross])
+    myplot = plot(interp_layer, point_layer,circumcenter_layer,plot_egdes_layer...,delaunay_layer, Scale.x_continuous(minvalue=1.0, maxvalue=2.0), Scale.y_continuous(minvalue=1.0, maxvalue=2.0))
     draw(SVG("delaunay.svg", 8inch, 8inch), myplot)==#
 
 
     # Compute areas T of original cells
     points_in_envelope = [f_e.a for f_e in final_edges]
     relevant_values = Array{eltype(values),1}(undef, length(points_in_envelope))
-    points_in_envelope = sort_angular(points_in_envelope) # stable
+    points_in_envelope = sort_angular(points_in_envelope)
     for (i, p) in enumerate(points_in_envelope)
         idx = findall(x -> x == p, points)
+        if isempty(idx)
+            # Hopefully getting the intersection speeds up the nearest neighbor search
+            idx = [findNearest(p, intersect(points, points_in_envelope))]  
+        end
         relevant_values[i] = values[idx[1]]
     end
     advanced_points = Array{Point2D,1}(undef, length(points_in_envelope))
@@ -311,6 +344,27 @@ function interpolate(pointlist, values, interpolation_point)
     #println(supposed_y,",", gety(interpolation_point))
     interpolated_value = sum([λ[k] * relevant_values[k] for k in 1:length(λ)])
     #println(interpolated_value)
+    return interpolated_value
+end
+
+"""    NaturalNeighborsInterpolator(pointlist, values)
+
+Return the interpolatant object.
+
+`pointlist` is an array of `Point2D`, representing the Coordinates
+at which `values` of the function are known.
+"""
+function NaturalNeighborsInterpolator(pointlist, values)
+    n = length(pointlist)
+    tess = DelaunayTessellation(n)
+    # Pushing into tess modifies points
+    push!(tess, copy(pointlist))
+    interpolator = let pointlist=pointlist, values=values, tess=tess
+        function interpolator(interpolation_point)
+            return interpolate(pointlist, values, interpolation_point, tess)
+        end
+    end
+    return interpolator
 end
 
 end # module
