@@ -20,7 +20,7 @@ values = [pointlist[1,i] + pointlist[2,i] for i in 1:size(pointlist)[2]]
 ```
 
 Get the interpolator function
-```
+```julia
 intp = NaturalNeighborsInterpolation.NaturalNeighborsInterpolator(points, values)
 ```
 
@@ -28,8 +28,18 @@ Use the interpolator to retrive interpolated values at any `Point2D`
 ```julia
 interpolated_value = intp(Point2D(1.5, 1.6))
 ```
-
 ![Alt text](interpolated_grid.png?raw=true "Example of using the interpolator at every gridpoint")
 
----
-Note: Values outside the interpolation region are mapped to the value of their nearest neighbor.
+By default, extrapolation falls back to the nearest neighbor algorithm, but passing a `fallback` keyword argument to `NaturalNeighborsInterpolator` can change this behaviour:
+```julia
+intp = NaturalNeighborsInterpolation.NaturalNeighborsInterpolator(points, values, fallback="natural")
+```
+
+![Alt text](interpolated_grid_natural.png?raw=true "Example of using the \"natural\" fallback")
+
+```julia
+intp = NaturalNeighborsInterpolation.NaturalNeighborsInterpolator(points, values, fallback="nan")
+```
+
+![Alt text](interpolated_grid_nan.png?raw=true "Example of using the \"nan\" fallback")
+
