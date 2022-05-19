@@ -1026,6 +1026,12 @@ git-tree-sha1 = "34db80951901073501137bdbc3d5a8e7bbd06670"
 uuid = "41fe7b60-77ed-43a1-b4f0-825fd5a5650d"
 version = "0.1.2"
 
+[[deps.VoronoiCells]]
+deps = ["GeometryBasics", "RecipesBase", "VoronoiDelaunay"]
+git-tree-sha1 = "56366c6d0ce6c27aa0ea8a5a4909ac434f0fd33f"
+uuid = "e3e34ffb-84e9-5012-9490-92c94d0c60a4"
+version = "0.3.0"
+
 [[deps.VoronoiDelaunay]]
 deps = ["Colors", "GeometricalPredicates", "Random"]
 git-tree-sha1 = "ed19f55808fb99951d36e8616a95fc9d94045466"

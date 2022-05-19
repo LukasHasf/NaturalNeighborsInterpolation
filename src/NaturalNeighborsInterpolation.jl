@@ -1,5 +1,7 @@
 module NaturalNeighborsInterpolation
 using VoronoiDelaunay
+using VoronoiCells
+using Plots
 using Gadfly
 import Cairo, Fontconfig
 using Random
@@ -281,6 +283,22 @@ function centerOfWeight(points)
     return Point(sum(x)/n, sum(y)/n)
 end
 
+function getAreaSimple(points)
+    @assert !isSelfIntersecting(points)
+    A = zero(Float64)
+    n = length(points)
+    xs = [getx(p) for p in points]
+    ys = [gety(p) for p in points]
+    mid_x = sum(xs) / n
+    mid_y = sum(ys) / n
+    midpoint = Point(mid_x, mid_y)
+    for q in 1:length(points)-1
+        temp_triangle = Primitive(midpoint, points[q], points[q+1])
+        A += area(temp_triangle)
+    end
+    A += area(Primitive(midpoint, points[1], points[end]))
+end
+
 """    getArea(points)
 
 
@@ -348,6 +366,25 @@ function areCollinear(a,b,c)
     dy2 = gety(c) - gety(b)
     crossproduct = dx1 * dy2 - dy1 * dx2
     return abs(crossproduct) < eps(Float64)
+end
+
+"""    isBetween(a,b,c)
+
+Check if `c` is on a line between `a` and `b`.
+"""
+function isBetween(a,b,c)
+    if !areCollinear(a,b,c)
+        return false
+    end
+    line = [getx(a) - getx(b), gety(a) - gety(b)]
+    extremum1 = line[1] * getx(a) + line[2] * gety(a)
+    extremum2 = line[1] * getx(b) + line[2] * gety(b)
+    value = line[1] * getx(c) + line[2] * gety(c)
+    if extremum1 > extremum2
+        return extremum1 >= value >= extremum2
+    else
+        return extremum1 <= value <= extremum2
+    end
 end
 
 function plotPoly(poly, name)
@@ -504,6 +541,100 @@ function interpolate(points, values, interpolation_point, tess)
     #println(supposed_y,",", gety(interpolation_point))
     interpolated_value = sum([λ[k] * relevant_values[k] for k in 1:length(λ)])
     #println(interpolated_value)
+    return interpolated_value
+end
+
+function interpolate2(points, values, interpolation_point)
+    # If point is on grid of known values, return that kown value
+    if interpolation_point in points
+        idx = findall(x -> x == interpolation_point, points)[1]
+        return values[idx]
+    end
+    rect = Rectangle(Point(1, 1), Point(2, 2))
+    tess = voronoicells(points, rect)
+
+    #= Plot
+    scatter([getx(p) for p in points], [gety(p) for p in points])
+    Plots.plot!(tess)
+    savefig("OriginalVoronoi.png")
+    # end Plot # =#
+
+    allpoints = copy(points)
+    push!(allpoints, interpolation_point)
+    tess2 = voronoicells(allpoints, rect)
+
+    #= Plot 
+    scatter([getx(p) for p in allpoints], [gety(p) for p in allpoints])
+    Plots.plot!(tess2)
+    savefig("ExtendedVoronoi.png")
+    # end Plot # =#
+
+    # Find the newly made cell of the interpolation point
+    interpolant_cell = nothing
+    for cell in tess2.Cells
+        polygon = Polygon(cell...)
+        if inpolygon(polygon, interpolation_point)
+            interpolant_cell = cell
+            break
+        end
+    end
+    
+    interpolant_polygon = Polygon(interpolant_cell...)
+    interpolant_edges = getEdges(interpolant_cell)
+    neighboring_cells = []
+    areas = []
+    relevant_values = []
+    relevant_points = []
+    for cell in tess.Cells
+        # List of points of that cell that are inside the interpolants cell
+        inner_points = []
+        for cellpoint in cell
+            if inpolygon(interpolant_polygon, cellpoint) ||
+               any([isBetween(edge.a, edge.b, cellpoint) for edge in interpolant_edges])
+                push!(inner_points, cellpoint)
+            end
+        end
+        # No inner points means the cell is no natural neighbor; skip it
+        if length(inner_points) ==0
+            continue
+        end
+        # Now the other way around: Find the points of interpolant_cell livin on
+        # the edge of cell
+        celledges = getEdges(cell)
+        for point in interpolant_cell
+            for edge in celledges
+                if areCollinear(edge.a, edge.b, point)
+                    push!(inner_points, point)
+                end
+            end
+        end
+        A = getAreaSimple(sort_angular(inner_points))
+        push!(areas, A)
+        push!(neighboring_cells, inner_points)
+        polygon = Polygon(cell...)
+        for p_i in 1:length(points)
+            if inpolygon(polygon, points[p_i])
+                push!(relevant_values, values[p_i])
+                push!(relevant_points, points[p_i])
+            end
+        end
+    end
+    #= Plot
+    Plots.plot(tess)
+    for cell in neighboring_cells
+        scatter!([getx(p) for p in cell], [gety(p) for p in cell])
+    end
+    savefig("InnerPoints.png")
+    # end plot =#
+    λ = areas ./ sum(areas)
+
+    #== Test if λ is correct via the Local Coordinates Property ==#
+    supposed_x = sum([λ[k] * getx(relevant_points[k]) for k in 1:length(λ)])
+    supposed_y = sum([λ[k] * gety(relevant_points[k]) for k in 1:length(λ)])
+    #println(supposed_x,",", getx(interpolation_point))
+    #println(supposed_y,",", gety(interpolation_point))
+
+    interpolated_value = sum([λ[k] * relevant_values[k] for k in 1:length(λ)])
     return interpolated_value
 end
 
