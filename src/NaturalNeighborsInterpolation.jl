@@ -150,7 +150,7 @@ hull of the `pointlist` are treated with the method specified by `fallback`:
 Return the value of the nearest neighbor (`\"nearest\"`), use the natural neighbor
 interpolation (`\"natural\"`) or return NaN64 (\"nan\").
 """
-function NaturalNeighborsInterpolator(pointlist, values; fallback="nan")
+function NaturalNeighborsInterpolator(pointlist, values; fallback="nearest")
     @assert fallback in ["nearest", "natural", "nan"] "fallback has to be one of [\"nearest\", \"natural\", \"nan\"] but was \"$fallback\""
     rect = Rectangle(Point(1, 1), Point(2, 2))
     tess = voronoicells(pointlist, rect)
