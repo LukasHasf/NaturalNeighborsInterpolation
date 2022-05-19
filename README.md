@@ -28,5 +28,8 @@ Use the interpolator to retrive interpolated values at any `Point2D`
 ```julia
 interpolated_value = intp(Point2D(1.5, 1.6))
 ```
+
+![Alt text](interpolated_grid.png?raw=true "Example of using the interpolator at every gridpoint")
+
 ---
 Note: Values outside the interpolation region are mapped to the value of their nearest neighbor.
