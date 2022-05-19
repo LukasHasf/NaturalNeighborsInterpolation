@@ -125,7 +125,7 @@ end
 """    reduce(cell)
 
 Remove (almost) duplicate points from `cell`.
-Threshold for points to be considered same is a distance less than `1e-15`.
+Threshold for points to be considered same is a distance less than `1e-14`.
 """
 function reduce(cell)
     cell = unique(cell)
@@ -137,7 +137,7 @@ function reduce(cell)
             if p1==p2
                 continue
             end
-            if distSq(p1, p2) < 1e-30 && !(p2 in checked_points)
+            if distSq(p1, p2) < 1e-28 && !(p2 in checked_points)
                 isOkay = false
             end
         end
