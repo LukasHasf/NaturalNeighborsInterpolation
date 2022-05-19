@@ -3,3 +3,6 @@ test/delaunay.jpg
 plots/*
 *.svg
 *.png
+!interpolated_grid.png
+!interpolated_grid_nan.png
+!interpolated_grid_natural.png
