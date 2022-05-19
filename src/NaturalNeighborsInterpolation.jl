@@ -15,15 +15,19 @@ include("utils.jl")
 Interpolate at `interpolation_point` using the known `values` at coordinate `pointlist`.
 `points` is a `Vector` of `Point2D`, and `interpolation_point` a single `Point2D`.
 """
-function interpolate(points, values, interpolation_point, tess, rect, convex_hull; attempt=0)
+function interpolate(points, values, interpolation_point, tess, rect, convex_hull, fallback; attempt=0)
     # If point is on grid of known values, return that kown value
     if interpolation_point in points
         idx = findall(x -> x == interpolation_point, points)[1]
         return values[idx]
     end
 
-    if !inpolygon(convex_hull, interpolation_point)
-        return values[findNearest(interpolation_point, points)]
+    if fallback in ["nearest", "nan"] && !inpolygon(convex_hull, interpolation_point)
+        if fallback == "nan"
+            return NaN64
+        elseif fallback=="nearest"
+            return values[findNearest(interpolation_point, points)]
+        end
     end
     #= Plot
     scatter([getx(p) for p in points], [gety(p) for p in points])
@@ -54,7 +58,7 @@ function interpolate(points, values, interpolation_point, tess, rect, convex_hul
         if attempt>10
             return values[findNearest(interpolation_point, points)]
         elseif attempt <= 10
-            return interpolate(points, values, interpolation_point, tess, rect, convex_hull, attempt=attempt+1)
+            return interpolate(points, values, interpolation_point, tess, rect, convex_hull, fallback, attempt=attempt+1)
         end
     end
     interpolant_cell = reduce(interpolant_cell)
@@ -136,14 +140,18 @@ function interpolate(points, values, interpolation_point, tess, rect, convex_hul
     return interpolated_value
 end
 
-"""    NaturalNeighborsInterpolator(pointlist, values)
+"""    NaturalNeighborsInterpolator(pointlist, values; fallback= \"nearest\")
 
 Return the interpolatant object.
 
 `pointlist` is an array of `Point2D`, representing the Coordinates
-at which `values` of the function are known.
+at which `values` of the function are known. Points outside the convex
+hull of the `pointlist` are treated with the method specified by `fallback`:
+Return the value of the nearest neighbor (`\"nearest\"`), use the natural neighbor
+interpolation (`\"natural\"`) or return NaN64 (\"nan\").
 """
-function NaturalNeighborsInterpolator(pointlist, values)
+function NaturalNeighborsInterpolator(pointlist, values; fallback="nan")
+    @assert fallback in ["nearest", "natural", "nan"] "fallback has to be one of [\"nearest\", \"natural\", \"nan\"] but was \"$fallback\""
     rect = Rectangle(Point(1, 1), Point(2, 2))
     tess = voronoicells(pointlist, rect)
 
@@ -154,9 +162,9 @@ function NaturalNeighborsInterpolator(pointlist, values)
     hullpoints = [Point2D(e[1], e[2]) for e in points(Pch)]
     hull = Polygon(sort_angular(hullpoints)...)
 
-    interpolator = let pointlist=pointlist, values=values, tess=tess, rect=rect, hull=hull
+    interpolator = let pointlist=pointlist, values=values, tess=tess, rect=rect, hull=hull, fallback=fallback
         function interpolator(interpolation_point)
-            return interpolate(pointlist, values, interpolation_point, tess, rect, hull)
+            return interpolate(pointlist, values, interpolation_point, tess, rect, hull, fallback)
         end
     end
     return interpolator
