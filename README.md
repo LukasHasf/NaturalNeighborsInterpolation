@@ -8,6 +8,7 @@ Currently not in an usable state yet.
 
 Prepare your known points as a vector of `Point2D`. For technical reasons in the employed package _VoronoiDelaunay.jl_, all points must be in the rectangle `[1, 2] x [1, 2]`.
 ```julia
+using NaturalNeighborsInterpolation
 pointlist = [0.45 0.6 0.4 0.6 0.4 0.6 0.55 0.7  0.4; 
              0.4  0.4 0.6 0.6 0.55 0.5 0.4  0.55 0.4] .+ 1
 values = [pointlist[1,i] + pointlist[2,i] for i in 1:size(pointlist)[2]]
@@ -21,10 +22,10 @@ values = [pointlist[1,i] + pointlist[2,i] for i in 1:size(pointlist)[2]]
 
 Get the interpolator function
 ```julia
-intp = NaturalNeighborsInterpolation.NaturalNeighborsInterpolator(points, values)
+intp = NaturalNeighborsInterpolator(points, values)
 ```
 
-Use the interpolator to retrive interpolated values at any `Point2D`
+Use the interpolator to retrieve interpolated values at any `Point2D`
 ```julia
 interpolated_value = intp(Point2D(1.5, 1.6))
 ```
@@ -32,13 +33,13 @@ interpolated_value = intp(Point2D(1.5, 1.6))
 
 By default, extrapolation falls back to the nearest neighbor algorithm, but passing a `fallback` keyword argument to `NaturalNeighborsInterpolator` can change this behaviour:
 ```julia
-intp = NaturalNeighborsInterpolation.NaturalNeighborsInterpolator(points, values, fallback="natural")
+intp = NaturalNeighborsInterpolator(points, values, fallback="natural")
 ```
 
 ![Alt text](interpolated_grid_natural.png?raw=true "Example of using the \"natural\" fallback")
 
 ```julia
-intp = NaturalNeighborsInterpolation.NaturalNeighborsInterpolator(points, values, fallback="nan")
+intp = NaturalNeighborsInterpolator(points, values, fallback="nan")
 ```
 
 ![Alt text](interpolated_grid_nan.png?raw=true "Example of using the \"nan\" fallback")
