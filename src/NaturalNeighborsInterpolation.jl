@@ -145,13 +145,16 @@ end
 
 Return the interpolatant object.
 
-`pointlist` is an array of `Point2D`, representing the Coordinates
+`pointlist` is an array of `Point2D` or an array of size `(2,n)`, representing the `n` coordinates
 at which `values` of the function are known. Points outside the convex
 hull of the `pointlist` are treated with the method specified by `fallback`:
 Return the value of the nearest neighbor (`\"nearest\"`), use the natural neighbor
 interpolation (`\"natural\"`) or return NaN64 (\"nan\").
 """
 function NaturalNeighborsInterpolator(pointlist, values; fallback="nearest")
+    if eltype(pointlist)<:Real
+        pointlist = Point2D[Point(pointlist[1,i], pointlist[2,i]) for i in 1:size(pointlist)[2]]
+    end
     @assert fallback in ["nearest", "natural", "nan"] "fallback has to be one of [\"nearest\", \"natural\", \"nan\"] but was \"$fallback\""
     rect = Rectangle(Point(1, 1), Point(2, 2))
     tess = voronoicells(pointlist, rect)
