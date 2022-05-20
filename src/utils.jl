@@ -1,4 +1,4 @@
-export Edge, equals, sharePoint, midPoint, getEdges, isBetween
+export Edge, sharePoint, midPoint, getEdges, isBetween
 export sort_angular, distSq, reduce, getAreaSimple
 
 """    Edge(a,b)
@@ -8,17 +8,6 @@ An undirected egde between `Point2D` `a` and `Point2D` `b`.
 struct Edge
     a::Point2D
     b::Point2D
-end
-
-"""    equals(e1::Edge, e2::Edge)
-
-Return `true` if `e1` and `e2` connect the same points.
-"""
-function equals(e1::Edge, e2::Edge)
-    if ((e1.a == e2.a) && (e1.b == e2.b)) || ((e1.a == e2.b) && (e1.b == e2.a))
-        return true
-    end
-    return false
 end
 
 """    sharePoint(e1::Edge, e2::Edge)
@@ -129,8 +118,8 @@ Threshold for points to be considered same is a distance less than `1e-14`.
 """
 function reduce(cell)
     cell = unique(cell)
-    reduced_cell = []
-    checked_points = []
+    reduced_cell = Array{Point2D}(undef, 0)
+    checked_points = Array{Point2D}(undef, 0)
     for p1 in cell
         isOkay = true
         for p2 in cell
@@ -353,4 +342,12 @@ function findNearest(p, points)
         end
     end
     return min_index
+end
+
+"""    equals(e1::Edge, e2::Edge)
+
+Return `true` if `e1` and `e2` connect the same points.
+"""
+function equals(e1::Edge, e2::Edge)
+    return ((e1.a == e2.a) && (e1.b == e2.b)) || ((e1.a == e2.b) && (e1.b == e2.a))
 end

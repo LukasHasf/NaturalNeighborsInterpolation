@@ -73,13 +73,13 @@ function interpolate(points, values, interpolation_point, tess, rect, convex_hul
 
     interpolant_polygon = Polygon(interpolant_cell...)
     interpolant_edges = getEdges(interpolant_cell)
-    neighboring_cells = []
-    areas = []
-    relevant_values = []
-    relevant_points = []
+    neighboring_cells = Array{Array{Point2D, 1}, 1}(undef, 0)
+    areas = Array{Float64, 1}(undef, 0)
+    relevant_values = Array{Float64, 1}(undef, 0)
+    relevant_points = Array{Point2D, 1}(undef, 0)
     for cell in tess.Cells
         # List of points of that cell that are inside the interpolants cell
-        inner_points = []
+        inner_points = Array{Point2D, 1}(undef, 0)
         for cellpoint in cell
             if inpolygon(interpolant_polygon, cellpoint)||
                any([isBetween(edge.a, edge.b, cellpoint) for edge in interpolant_edges])
@@ -136,8 +136,8 @@ function interpolate(points, values, interpolation_point, tess, rect, convex_hul
     #supposed_y = sum([λ[k] * gety(relevant_points[k]) for k in 1:length(λ)])
     #println(supposed_x,",", getx(interpolation_point))
     #println(supposed_y,",", gety(interpolation_point))
-
-    interpolated_value = sum([λ[k] * relevant_values[k] for k in 1:length(λ)])
+    
+    interpolated_value = λ' * relevant_values
     return interpolated_value
 end
 
