@@ -1,6 +1,6 @@
 module NaturalNeighborsInterpolation
 
-export NaturalNeighborsInterpolator
+export NaturalNeighborsInterpolator, interpolateGrid
 
 using VoronoiDelaunay
 using VoronoiCells
@@ -172,6 +172,21 @@ function NaturalNeighborsInterpolator(pointlist, values; fallback="nearest")
         end
     end
     return interpolator
+end
+
+"""    interpolateGrid(xs, ys, intp)
+
+Using the interpolatant function `intp`, interpolate the values at each point 
+on a grid defined by x-coordinates `xs` and y-coordinates `ys`.
+"""
+function interpolateGrid(xs, ys, intp)
+    interpolated_grid = Array{Float64, 2}(undef, length(ys), length(xs))
+    for j in eachindex(xs)
+        for i in eachindex(ys)
+            interpolated_grid[i,j] = intp(Point(xs[j],ys[i]))
+        end
+    end
+    return interpolated_grid
 end
 
 end # module
