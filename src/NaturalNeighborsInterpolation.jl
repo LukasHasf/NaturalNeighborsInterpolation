@@ -56,7 +56,6 @@ function interpolate(points, values, interpolation_point, tess, rect, convex_hul
         end
     end
     if isnothing(interpolant_cell)
-        println("Attempt ", attempt)
         if attempt>10
             return values[findNearest(interpolation_point, points)]
         elseif attempt <= 10
