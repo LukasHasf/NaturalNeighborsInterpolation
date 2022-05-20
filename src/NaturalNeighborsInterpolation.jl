@@ -7,7 +7,6 @@ using VoronoiCells
 using Plots
 using Gadfly
 import Cairo, Fontconfig
-using Random
 using GeometricalPredicates
 using Combinatorics
 using Polyhedra, CDDLib
