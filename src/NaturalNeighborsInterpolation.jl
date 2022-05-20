@@ -1,4 +1,7 @@
 module NaturalNeighborsInterpolation
+
+export NaturalNeighborsInterpolator
+
 using VoronoiDelaunay
 using VoronoiCells
 using Plots
